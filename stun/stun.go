@@ -41,7 +41,7 @@ func StunDial() addrInfo {
 func dialingLoop() (info addrInfo) {
 	var conn net.Conn
 	transactionID := make([]byte, 12)
-	inputBuf := make([]byte, 0)
+	inputBuf := make([]byte, 4096)
 	buf := []byte{
 		0x00, 0x01, // binding request
 		0x00, 0x00, // message length
@@ -59,7 +59,6 @@ func dialingLoop() (info addrInfo) {
 	RETRY:
 		conn, err = net.Dial("udp", v)
 		if err != nil {
-			conn.Close()
 			log.Println(errdef.WarnBase + "dialing error on server \"" + v + "\", switching server")
 			continue
 		}
@@ -77,9 +76,9 @@ func dialingLoop() (info addrInfo) {
 
 		err, n, info := decodeResp(inputBuf, transactionID)
 		if err != nil && n == sterr.Alternate {
+			conn.Close()
 			continue
 		} else if err != nil && n == sterr.Retry {
-			conn.Close()
 			goto RETRY
 		} else if err != nil && n == sterr.Other {
 			conn.Close()
@@ -140,13 +139,13 @@ func extractArg(argList []byte) (args []byte, argument attrInfo) {
 	argLen := binary.BigEndian.Uint16(argList[2:4])
 	var argumentType int
 
-	if n := slices.Compare(argType, []byte{0x00, 0x20}); n != 0 {
+	if n := slices.Compare(argType, []byte{0x00, 0x20}); n == 0 {
 		argumentType = stattr.XORMappedAddr
-	} else if n := slices.Compare(argType, []byte{0x00, 0x01}); n != 0 {
+	} else if n := slices.Compare(argType, []byte{0x00, 0x01}); n == 0 {
 		argumentType = stattr.MappedAddr
-	} else if n := slices.Compare(argType, []byte{0x00, 0x09}); n != 0 {
+	} else if n := slices.Compare(argType, []byte{0x00, 0x09}); n == 0 {
 		argumentType = stattr.Error
-	} else if n := slices.Compare(argType, []byte{0x00, 0x08}); n != 0 {
+	} else if n := slices.Compare(argType, []byte{0x00, 0x08}); n == 0 {
 		argumentType = stattr.MessageIntegrity
 	} else {
 		argumentType = stattr.Unimportant
@@ -156,7 +155,7 @@ func extractArg(argList []byte) (args []byte, argument attrInfo) {
 
 	info := attrInfo{
 		AttrType:   argumentType,
-		AttrValue:  argList[4:argLen],
+		AttrValue:  argList[4 : argLen+4],
 		FullLength: 4 + argLen + padding,
 	}
 	argList = argList[:argLen+padding]
@@ -178,18 +177,19 @@ func parseArgument(argument []byte, header []byte, argtype int, tID []byte) (err
 		xIP := argument[4:]                                                                       // XOR-MAPPED
 		ipType, ip := decodeIP(xIP, tID, family)
 
-		addrinfo := addrInfo{
-			IsIPv6:  ipType,
-			Port:    port,
-			Address: ip,
+		addrinfo = addrInfo{
+			isInitialised: true,
+			IsIPv6:        ipType,
+			Port:          port,
+			Address:       ip,
 		}
 		return nil, sterr.Success, addrinfo
 
 	} else if n := slices.Compare(reqType, errResp); n == 0 {
 		_ = argument[:2]
-		class := binary.BigEndian.Uint16(argument[2:3])
-		number := binary.BigEndian.Uint16(argument[3:5])
-		reason := string(argument[5:])
+		class := int(argument[2])
+		number := int(argument[3])
+		reason := string(argument[4:])
 
 		declineStatus := class*100 + number
 		switch declineStatus {
