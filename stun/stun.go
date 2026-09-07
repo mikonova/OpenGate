@@ -33,6 +33,7 @@ var magicCookie []byte = []byte{0x21, 0x12, 0xA4, 0x42}
 func StunDial() addrInfo {
 	for {
 		if addrinfo := dialingLoop(); addrinfo.isInitialised {
+			log.Println(errdef.InfoBase + "STUN sesponse received!")
 			return addrinfo
 		}
 	}
