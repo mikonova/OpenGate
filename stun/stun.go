@@ -16,29 +16,29 @@ import (
 )
 
 type addrInfo struct {
-	IsIPv6  bool
-	Port    string
-	Address string
+	isInitialised bool
+	IsIPv6        bool
+	Port          uint16
+	Address       net.IP
 }
 
 type attrInfo struct {
 	AttrType   int
 	AttrValue  []byte
 	FullLength uint16
-	Padding    uint16
 }
 
 var magicCookie []byte = []byte{0x21, 0x12, 0xA4, 0x42}
 
-func StunDial() {
+func StunDial() addrInfo {
 	for {
-		if success := dialingLoop(); success {
-			break
+		if addrinfo := dialingLoop(); addrinfo.isInitialised {
+			return addrinfo
 		}
 	}
 }
 
-func dialingLoop() (dialSuccess bool) {
+func dialingLoop() (info addrInfo) {
 	var conn net.Conn
 	transactionID := make([]byte, 12)
 	inputBuf := make([]byte, 0)
@@ -75,7 +75,7 @@ func dialingLoop() (dialSuccess bool) {
 			continue
 		}
 
-		err, n := decodeResp(inputBuf, transactionID)
+		err, n, info := decodeResp(inputBuf, transactionID)
 		if err != nil && n == sterr.Alternate {
 			continue
 		} else if err != nil && n == sterr.Retry {
@@ -86,14 +86,14 @@ func dialingLoop() (dialSuccess bool) {
 			continue
 		} else if err == nil && n == sterr.Success {
 			conn.Close()
-			return true
+			return info
 		} else {
 			conn.Close()
 			continue
 		}
 
 	}
-	return false
+	return info
 
 }
 
@@ -102,7 +102,7 @@ err != nil if any sort of error occured. "n" represents what kind of action shou
 n = 0 means there's no error, n = 1 means that server should not be switched, n = 2 means alternate server should be tried
 n = 3 means any other error, n = 4 means an error is supposed to be fatal (should not happen once configured)
 */
-func decodeResp(buf []byte, tID []byte) (err error, n int) {
+func decodeResp(buf []byte, tID []byte) (err error, n int, info addrInfo) {
 	argument := attrInfo{}
 	header := buf[:20]
 	args := buf[20:]
@@ -113,21 +113,25 @@ func decodeResp(buf []byte, tID []byte) (err error, n int) {
 	if n := slices.Compare(transactionID, tID); n != 0 {
 		err = errors.New(errdef.ErrBase + "unmatching STUN transactionID")
 		log.Println(err.Error())
-		return err, sterr.Alternate
+		return err, sterr.Alternate, info
 	}
 
 	if n := slices.Compare(cookie, magicCookie); n != 0 {
 		err = errors.New(errdef.ErrBase + "unmatching STUN magic cookie")
 		log.Println(err.Error())
-		return err, sterr.Alternate
+		return err, sterr.Alternate, info
 	}
 
 	for i := 0; i < int(msgLength); {
 		args, argument = extractArg(args)
 		i += int(argument.FullLength)
-		err, n = parseArgument(argument.AttrValue, header, argument.AttrType)
+		err, n, info = parseArgument(argument.AttrValue, header, argument.AttrType, tID)
+		if info.isInitialised != false {
+			break
+		}
+
 	}
-	return err, n
+	return err, n, info
 
 }
 
@@ -154,7 +158,6 @@ func extractArg(argList []byte) (args []byte, argument attrInfo) {
 		AttrType:   argumentType,
 		AttrValue:  argList[4:argLen],
 		FullLength: 4 + argLen + padding,
-		Padding:    padding,
 	}
 	argList = argList[:argLen+padding]
 	return argList, info
@@ -162,22 +165,27 @@ func extractArg(argList []byte) (args []byte, argument attrInfo) {
 }
 
 // TODO: доделать парсинг IP
-func parseArgument(argument []byte, header []byte, argtype int) (err error, n int) {
+func parseArgument(argument []byte, header []byte, argtype int, tID []byte) (err error, n int, addrinfo addrInfo) {
 	successResp := []byte{0x01, 0x01}
 	errResp := []byte{0x01, 0x11}
-	isIPv6 := false
 
 	reqType := header[:2] // 0x01, 0x01 if success response, 0x01, 0x11 if an error response
 
 	if n := slices.Compare(reqType, successResp); n == 0 && argtype == stattr.XORMappedAddr {
 		_ = argument[:1]                                                                          // always 0x00
-		family := argument[1:2]                                                                   // IPv4 or IPv6
+		family := argument[1]                                                                     // IPv4 or IPv6
 		port := binary.BigEndian.Uint16(argument[2:4]) ^ binary.BigEndian.Uint16(magicCookie[:2]) // MAPPED
 		xIP := argument[4:]                                                                       // XOR-MAPPED
-		if family[0] == byte(0x01) {
-			isIPv6 = true
+		ipType, ip := decodeIP(xIP, tID, family)
+
+		addrinfo := addrInfo{
+			IsIPv6:  ipType,
+			Port:    port,
+			Address: ip,
 		}
-	} else if slices.Compare(reqType, errResp); n == 0 {
+		return nil, sterr.Success, addrinfo
+
+	} else if n := slices.Compare(reqType, errResp); n == 0 {
 		_ = argument[:2]
 		class := binary.BigEndian.Uint16(argument[2:3])
 		number := binary.BigEndian.Uint16(argument[3:5])
@@ -188,24 +196,45 @@ func parseArgument(argument []byte, header []byte, argtype int) (err error, n in
 		case 300:
 			err = errors.New(errdef.ErrBase + "try alternate STUN server: ")
 			log.Println(err.Error(), declineStatus, ", reason: ", reason)
-			return err, sterr.Alternate
+			return err, sterr.Alternate, addrinfo
 		case 400:
 			err = errors.New(errdef.ErrBase + "malformed STUN request: ")
 			log.Println(err.Error(), declineStatus, ", reason: ", reason)
-			return err, sterr.Other
+			return err, sterr.Other, addrinfo
 		case 500:
 			err = errors.New(errdef.ErrBase + "temporary server error: ")
 			log.Println(err.Error(), declineStatus, ", reason: ", reason)
-			return err, sterr.Retry
+			return err, sterr.Retry, addrinfo
 		default:
 			err = errors.New(errdef.ErrBase + "unexpected error: ")
 			log.Println(err.Error(), declineStatus, ", reason: ", reason)
-			return err, sterr.Alternate
+			return err, sterr.Alternate, addrinfo
 		}
 	} else {
 		err = errors.New(errdef.ErrBase + "unmatching STUN response type")
-		log.Println(err.Error())
-		return err, sterr.Other
+		//log.Println(err.Error())
+		return err, sterr.Other, addrinfo
 	}
-	return nil, sterr.Success
+}
+
+func decodeIP(xorMappedAddr []byte, transactionID []byte, fam byte) (bool, net.IP) {
+	if fam == byte(0x02) {
+		ipUnmapped := make([]byte, 16)
+		compositeCookie := append(magicCookie, transactionID...)
+		for key, value := range compositeCookie {
+			ipUnmapped[key] = xorMappedAddr[key] ^ value
+		}
+		ip := net.IP(ipUnmapped)
+		return false, ip
+	} else if fam == byte(0x01) {
+		ipUnmapped := make([]byte, 4)
+		for key, value := range magicCookie {
+			ipUnmapped[key] = xorMappedAddr[key] ^ value
+		}
+		ip := net.IPv4(ipUnmapped[0], ipUnmapped[1], ipUnmapped[2], ipUnmapped[3])
+		return false, ip
+	} else {
+		log.Println(errdef.ErrBase + "unrecognized IP format in STUN response")
+	}
+	return false, nil
 }
