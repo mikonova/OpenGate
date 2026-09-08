@@ -43,6 +43,6 @@ func setStandartLogger(appPath string) {
 	}
 
 	log.SetOutput(logFile)
-	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	log.SetFlags(log.Ltime | log.Lshortfile)
 
 }
