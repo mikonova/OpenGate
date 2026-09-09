@@ -6,9 +6,9 @@ import (
 )
 
 type PrecisionTicker struct {
-	offsetTime   time.Duration
+	startTime    time.Time
 	intervalTime time.Duration
-	sigChan      chan int
+	sig          int
 	Tick         chan time.Time
 	mut          sync.RWMutex
 }
@@ -18,30 +18,36 @@ type Offset struct {
 	NanosecondOffset int64
 }
 
-func NewPTicker(offset, interval time.Duration) *PrecisionTicker {
+func NewPTicker(ntpTime time.Time, interval time.Duration) *PrecisionTicker {
 	pt := PrecisionTicker{
-		offsetTime:   offset,
+		startTime:    ntpTime,
 		intervalTime: interval,
-		sigChan:      make(chan int, 1),
-		Tick:         make(chan time.Time),
+		Tick:         make(chan time.Time, 1),
 	}
 	go func() {
-		time.After(pt.offsetTime)
 		for {
-			if n := <-pt.sigChan; n == -1 {
+			pt.mut.Lock()
+			if pt.sig == -1 {
+				pt.mut.Unlock()
 				break
 			}
-			pt.mut.Lock()
-			pt.Tick <- time.Now()
 			pt.mut.Unlock()
-			time.Sleep(pt.intervalTime)
+			if len(pt.Tick) == 1 {
+				_ = <-pt.Tick
+			}
+			pt.Tick <- ntpTime
+			elapsed := time.Since(ntpTime)
+			ntpTime = ntpTime.Add(elapsed)
+			sleepTime := pt.intervalTime - elapsed
+			time.Sleep(sleepTime)
 		}
 	}()
 	return &pt
 }
 
-func (t *PrecisionTicker) Close() {
-	defer close(t.sigChan)
-	defer close(t.Tick)
-	t.sigChan <- -1
+func (pt *PrecisionTicker) Close() {
+	defer close(pt.Tick)
+	pt.mut.RLock()
+	pt.sig = -1
+	pt.mut.RUnlock()
 }

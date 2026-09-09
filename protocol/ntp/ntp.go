@@ -48,28 +48,33 @@ var ntpServers = []string{
 	"ntp7.ntp-servers.net",
 }
 
-var req = make([]byte, 48)
-
 const ntpEpochDifference int64 = 2208988800
 const epochSize int64 = 1 << 32
 
-func GetNtpTime() {
-	req[0] = 0b00011011
+/*
+makes a call to NTP time server and returns a precision ticker delayed for the offset between a system clock and an NTP server
+and an offset itself
+*/
+func GetNtpTime(interval time.Duration) *ticker.PrecisionTicker {
 	compareBuf := make([]byte, 48)
 	for {
 		buf := ntpConnLoop()
-		if !slices.Equal(buf, compareBuf) {
-			break
+		if slices.Equal(buf, compareBuf) {
+			continue
 		}
+		t := parseNTPResp(buf)
+		return t
+
 	}
 
 }
 
 func ntpConnLoop() []byte {
-
+	var req = make([]byte, 48)
+	req[0] = 0b00011011
 	buffer := make([]byte, 48)
 	for _, v := range ntpServers {
-		conn, err := net.Dial("udp", v)
+		conn, err := net.Dial("udp", v+":123")
 		if err != nil {
 			log.Println(errdef.WarnBase + "dialing error on ntp server \"" + v + "\", switching server")
 			continue
@@ -96,7 +101,7 @@ func ntpConnLoop() []byte {
 	return make([]byte, 48)
 }
 
-func parseNTPResp(buffer []byte) ticker.Offset {
+func parseNTPResp(buffer []byte) *ticker.PrecisionTicker {
 	resp := NTPResponse{
 		Header:             buffer[0],
 		Stratum:            buffer[1],
@@ -114,23 +119,20 @@ func parseNTPResp(buffer []byte) ticker.Offset {
 	if int16(resp.Stratum) == 0 {
 		log.Println(errdef.WarnBase + "STRATUM 0 MESSAGE, PROBABLE KoD")
 		log.Println(" Kiss code: ", resp.ReferenceID)
-		return ticker.Offset{}
+		return &ticker.PrecisionTicker{}
 	}
-	seconds := binary.BigEndian.Uint32(resp.TransmitTimestamp[:])
-	unixSeconds := int64(seconds) + ntpEpochDifference
-	if unixTime := time.Now().Unix(); unixTime > unixSeconds+epochSize/2 {
-		unixSeconds += epochSize
-	} else if unixTime < unixSeconds+epochSize/2 {
+	seconds := binary.BigEndian.Uint32(resp.TransmitTimestamp[:4])
+	unixSeconds := int64(seconds) - ntpEpochDifference
+	diff := unixSeconds - time.Now().Unix()
+	if diff > epochSize/2 {
 		unixSeconds -= epochSize
+	} else if diff < -epochSize/2 {
+		unixSeconds += epochSize
 	}
-	unixSubSeconds := int64(binary.BigEndian.Uint32(resp.TransmitTimestamp[:]))
-	unixSeconds /= epochSize
+	unixSubSeconds := int64(binary.BigEndian.Uint32(resp.TransmitTimestamp[4:]))
+	unixSubSeconds = int64(float64(unixSubSeconds) * 1_000_000_000 / float64(epochSize)) // division to get normal fractions
 
-	offset := ticker.Offset{
-		SecondOffset:     unixSeconds - time.Now().Unix(),
-		NanosecondOffset: unixSubSeconds - time.Now().UnixNano(),
-	}
-	return offset
-
-	//time.Time{}
+	ntpTime := time.Unix(unixSeconds, unixSubSeconds)
+	pt := ticker.NewPTicker(ntpTime, time.Millisecond)
+	return pt
 }
