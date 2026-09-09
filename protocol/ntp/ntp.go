@@ -53,7 +53,7 @@ const epochSize int64 = 1 << 32
 
 /*
 makes a call to NTP time server and returns a precision ticker delayed for the offset between a system clock and an NTP server
-and an offset itself
+The ticker works in a goroutine, yet it is important to use each ticker ONCE as each use consumes a value from its time channel
 */
 func GetNtpTime(interval time.Duration) *ticker.PrecisionTicker {
 	compareBuf := make([]byte, 48)
