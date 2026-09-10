@@ -8,11 +8,11 @@ import (
 	"github.com/mikonova/OpenGate/errdef"
 )
 
-func SetDefDir() {
+func SetDefDir() string {
 	homepath, err := os.UserHomeDir()
 	if err != nil {
 		log.Println(errdef.ErrBase + "unable to find a user home dir")
-		return
+		return ""
 	}
 	p := filepath.Join(homepath, "OpenGate")
 	if _, err := os.Stat(p); err != nil {
@@ -22,6 +22,7 @@ func SetDefDir() {
 		}
 	}
 	setStandartLogger(p)
+	return p
 }
 
 func setStandartLogger(appPath string) {

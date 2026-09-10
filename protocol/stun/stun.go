@@ -11,8 +11,8 @@ import (
 
 	"github.com/mikonova/OpenGate/errdef"
 	sterr "github.com/mikonova/OpenGate/errdef/stunerrors"
-	stattr "github.com/mikonova/OpenGate/stun/stunattr"
-	"github.com/mikonova/OpenGate/stun/stunlist"
+	stattr "github.com/mikonova/OpenGate/protocol/stun/stunattr"
+	"github.com/mikonova/OpenGate/protocol/stun/stunlist"
 )
 
 type addrInfo struct {

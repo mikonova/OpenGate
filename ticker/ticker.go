@@ -25,6 +25,7 @@ func NewPTicker(ntpTime time.Time, interval time.Duration) *PrecisionTicker {
 		Tick:         make(chan time.Time, 1),
 	}
 	go func() {
+		var elapsed, sleepTime time.Duration
 		for {
 			pt.mut.Lock()
 			if pt.sig == -1 {
@@ -32,13 +33,10 @@ func NewPTicker(ntpTime time.Time, interval time.Duration) *PrecisionTicker {
 				break
 			}
 			pt.mut.Unlock()
-			if len(pt.Tick) == 1 {
-				_ = <-pt.Tick
-			}
 			pt.Tick <- ntpTime
-			elapsed := time.Since(ntpTime)
+			elapsed = time.Since(ntpTime)
 			ntpTime = ntpTime.Add(elapsed)
-			sleepTime := pt.intervalTime - elapsed
+			sleepTime = pt.intervalTime - elapsed
 			time.Sleep(sleepTime)
 		}
 	}()
