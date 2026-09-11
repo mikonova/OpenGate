@@ -1,18 +1,28 @@
 package secure
 
 import (
-	_ "crypto"
-	_ "crypto/aes"
-	_ "crypto/cipher"
-	_ "crypto/rand"
-	_ "crypto/sha256"
-	_ "os"
+	"crypto/aes"
+	"crypto/cipher"
+	"log"
+	"os"
+
+	"github.com/mikonova/OpenGate/errdef"
 )
 
-func ProcessKey(key string) {
-	//sha256.Sum256(key[])
+func GetKey() string {
+	return os.Getenv("key")
 }
 
-func Encrypt(key []byte) {
-	//cip := aes.NewCipher(key)
+func ProcessBytes(compositeKey []byte, data []byte) []byte {
+	key := compositeKey[:32]
+	iv := compositeKey[32:]
+	dst := make([]byte, len(data))
+
+	cip, err := aes.NewCipher(key)
+	if err != nil {
+		log.Panicln(errdef.ErrBase + err.Error())
+	}
+	stream := cipher.NewCTR(cip, iv)
+	stream.XORKeyStream(dst, data)
+	return dst
 }
