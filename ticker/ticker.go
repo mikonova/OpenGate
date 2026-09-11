@@ -13,11 +13,6 @@ type PrecisionTicker struct {
 	mut          sync.RWMutex
 }
 
-type Offset struct {
-	SecondOffset     int64
-	NanosecondOffset int64
-}
-
 func NewPTicker(ntpTime time.Time, interval time.Duration) *PrecisionTicker {
 	pt := PrecisionTicker{
 		startTime:    ntpTime,

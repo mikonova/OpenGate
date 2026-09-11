@@ -1,13 +1,10 @@
 package logger
 
 import (
-	cryptrand "crypto/rand"
-	"crypto/sha256"
-	"encoding/binary"
+	"crypto/ecdh"
+	"crypto/rand"
 	"encoding/hex"
 	"log"
-	"math/big"
-	"math/rand"
 	"os"
 
 	"github.com/mikonova/OpenGate/errdef"
@@ -21,18 +18,17 @@ func KeyGen(appPath string) (path string) {
 		log.Fatalln(errdef.ErrBase, err)
 	}
 	defer file.Close()
-	random, err := cryptrand.Int(cryptrand.Reader, big.NewInt(1<<32))
-	byteKey := make([]byte, 0)
-	binary.LittleEndian.AppendUint64(byteKey, random.Uint64())
-	keyHash := sha256.Sum256(byteKey)
-	keySlice := keyHash[:]
-	byteNonce := make([]byte, 0)
-	binary.LittleEndian.AppendUint64(byteNonce, rand.Uint64())
-	nonceArray := sha256.Sum256(byteNonce)
-	hashedNonce := nonceArray[:]
+	curve := ecdh.P256()
+	privateKey, err := curve.GenerateKey(rand.Reader)
+	if err != nil {
+		log.Println(errdef.ErrBase, "cannot create private key")
+		defer KeyGen(appPath)
+	}
 
-	compositeKey := hex.EncodeToString(keySlice) + ";" + hex.EncodeToString(hashedNonce)
-	file.WriteString("key=" + compositeKey)
+	publicKey := privateKey.PublicKey()
+	privKeyHex := hex.EncodeToString(privateKey.Bytes())
+	pubKeyHex := hex.EncodeToString(publicKey.Bytes())
+	file.WriteString("public=" + pubKeyHex + "\n" + "secret=" + privKeyHex + "\n")
 	return
 }
 

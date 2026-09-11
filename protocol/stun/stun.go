@@ -15,7 +15,7 @@ import (
 	"github.com/mikonova/OpenGate/protocol/stun/stunlist"
 )
 
-type addrInfo struct {
+type AddrInfo struct {
 	isInitialised bool
 	IsIPv6        bool
 	Port          uint16
@@ -30,7 +30,7 @@ type attrInfo struct {
 
 var magicCookie []byte = []byte{0x21, 0x12, 0xA4, 0x42}
 
-func StunDial() addrInfo {
+func StunDial() AddrInfo {
 	for {
 		if addrinfo := dialingLoop(); addrinfo.isInitialised {
 			log.Println(errdef.InfoBase + "STUN sesponse received!")
@@ -39,7 +39,7 @@ func StunDial() addrInfo {
 	}
 }
 
-func dialingLoop() (info addrInfo) {
+func dialingLoop() (info AddrInfo) {
 	var conn net.Conn
 	transactionID := make([]byte, 12)
 	inputBuf := make([]byte, 4096)
@@ -102,7 +102,7 @@ err != nil if any sort of error occured. "n" represents what kind of action shou
 n = 0 means there's no error, n = 1 means that server should not be switched, n = 2 means alternate server should be tried
 n = 3 means any other error, n = 4 means an error is supposed to be fatal (should not happen once configured)
 */
-func decodeResp(buf []byte, tID []byte) (err error, n int, info addrInfo) {
+func decodeResp(buf []byte, tID []byte) (err error, n int, info AddrInfo) {
 	argument := attrInfo{}
 	header := buf[:20]
 	args := buf[20:]
@@ -165,7 +165,7 @@ func extractArg(argList []byte) (args []byte, argument attrInfo) {
 }
 
 // TODO: доделать парсинг IP
-func parseArgument(argument []byte, header []byte, argtype int, tID []byte) (err error, n int, addrinfo addrInfo) {
+func parseArgument(argument []byte, header []byte, argtype int, tID []byte) (err error, n int, addrinfo AddrInfo) {
 	successResp := []byte{0x01, 0x01}
 	errResp := []byte{0x01, 0x11}
 
@@ -178,7 +178,7 @@ func parseArgument(argument []byte, header []byte, argtype int, tID []byte) (err
 		xIP := argument[4:]                                                                       // XOR-MAPPED
 		ipType, ip := decodeIP(xIP, tID, family)
 
-		addrinfo = addrInfo{
+		addrinfo = AddrInfo{
 			isInitialised: true,
 			IsIPv6:        ipType,
 			Port:          port,
