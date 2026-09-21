@@ -2,18 +2,18 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 	"time"
 
 	"github.com/mikonova/OpenGate/logger"
+	"github.com/mikonova/OpenGate/protocol/custom"
 	"github.com/mikonova/OpenGate/protocol/ntp"
 )
 
 var AppPath string
 
 func main() {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
+
+	custom.GlobalConnectionsInit()
 	AppPath = logger.SetDefDir()
 
 	ticker := ntp.GetNtpTime(time.Second)

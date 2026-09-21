@@ -3,20 +3,23 @@ package secure
 import (
 	_ "crypto/aes"
 	_ "crypto/cipher"
-	_ "crypto/ecdh"
+	"crypto/ecdh"
 	_ "crypto/rand"
 	_ "log"
 	"os"
 )
 
 func GetKeys() (secret, public string) {
-	os.Getenv("secret")
-	os.Getenv("public")
+	secret = os.Getenv("secret")
+	public = os.Getenv("public")
+	return
 }
 
 func CreateSharedSecret(remotePublic []byte, secret []byte) {
 
 }
+
+func 
 
 // func ProcessBytes(compositeKey []byte, data []byte) []byte {
 // 	key := compositeKey[:32]
