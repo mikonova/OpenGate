@@ -1,14 +1,14 @@
 package main
 
 import (
-	"gorelayesp/wifi"
 	"machine"
+	"relayesp/wifi"
 	"time"
 )
 
 var (
-	key, pass string
-	CommChan  chan byte = make(chan byte)
+	key, pass, address string
+	CommChan           chan byte = make(chan byte)
 )
 
 func main() {
@@ -25,7 +25,13 @@ LOGIN:
 	if conf == "n" {
 		goto LOGIN
 	} else {
-		wifi.WifiConnect(ssid, pass)
+		var err error = nil
+		err, address = wifi.WifiConnect(ssid, pass)
+		if err != nil {
+			println("Unable to connect to network")
+			println(err.Error())
+			goto LOGIN
+		}
 	}
 	for {
 

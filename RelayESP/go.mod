@@ -1,4 +1,4 @@
-module gorelayesp
+module relayesp
 
 go 1.27.1
 

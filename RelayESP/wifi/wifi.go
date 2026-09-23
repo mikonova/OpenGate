@@ -1,7 +1,6 @@
 package wifi
 
 import (
-	"errors"
 	"net"
 	"time"
 
@@ -25,9 +24,8 @@ func WifiConnect(wifiName, pass string) (err error, address string) {
 	}
 	err = link.NetConnect(&params)
 	if err != nil {
-		conErr := errors.New("Connection error")
-		println(conErr.Error())
-		return conErr, ""
+		println("Connection error: ", err.Error())
+		return err, ""
 	}
 	println("Connected to WIFI")
 	time.Sleep(time.Second * 3)

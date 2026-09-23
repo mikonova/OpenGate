@@ -18,7 +18,7 @@ type Packet struct {
 	PacketType    byte      // 1 byte
 	Timestamp     time.Time // 8 bytes uint64
 	IsOutgoing    bool      // 1 byte
-	MessageLength int32     // 4 bytes
+	MessageLength uint32    // 4 bytes
 	Message       string    // variable
 }
 
